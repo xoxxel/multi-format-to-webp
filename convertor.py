@@ -2,88 +2,70 @@ import argparse
 from PIL import Image
 import os
 
-def convert_to_webp(input_path, output_path=None, quality=80):
-    """Convert an image to WebP format and return original and new sizes."""
+def convert_to_webp(input_path, output_path, quality=80):
     try:
-        # Open the image
         img = Image.open(input_path).convert("RGB")
-        
-        # Set output path if not provided
-        if output_path is None:
-            output_filename = os.path.splitext(os.path.basename(input_path))[0] + ".webp"
-            output_path = os.path.join(os.path.dirname(input_path) or ".", output_filename)
-        
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-        
-        # Get original file size
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
         original_size = os.path.getsize(input_path)
-        
-        # Save as WebP
         img.save(output_path, "WEBP", quality=quality)
-        
-        # Get new file size
         new_size = os.path.getsize(output_path)
-        
-        # Calculate percentage reduction
-        size_reduction = ((original_size - new_size) / original_size) * 100
-        size_reduction = round(size_reduction, 2)
-        
-        print(f"Successfully converted: {os.path.basename(input_path)} -> {os.path.basename(output_path)} (-{size_reduction}%)")
+
+        reduction = ((original_size - new_size) / original_size) * 100
+        print(f"✅ {os.path.basename(input_path)} → {os.path.basename(output_path)} | 🪶 -{round(reduction, 2)}%")
         return original_size, new_size, True
     except Exception as e:
-        print(f"Error converting {os.path.basename(input_path)}: {str(e)}")
-        return None, None, False
+        print(f"❌ Failed: {input_path} | Error: {str(e)}")
+        return 0, 0, False
 
 def main():
-    # Set up argument parser
     parser = argparse.ArgumentParser(description="Convert images to WebP format.")
-    parser.add_argument("input", nargs="+", help="Path to the image file(s) or directory to convert")
-    parser.add_argument("-o", "--output", help="Output directory or file path (optional)")
-    parser.add_argument("-q", "--quality", type=int, default=80, help="Quality of the output WebP (0-100, default: 80)")
-    
-    # Parse arguments
+    parser.add_argument("input", nargs="+", help="Image file(s) or folder(s) to convert")
+    parser.add_argument("-o", "--output", help="Optional output directory")
+    parser.add_argument("-q", "--quality", type=int, default=80, help="WebP quality (0-100, default=80)")
     args = parser.parse_args()
-    
-    # Process each input
-    total_converted = 0
-    total_files = 0
-    total_original_size = 0
-    total_new_size = 0
-    
-    supported_extensions = (".png", ".jpg", ".jpeg", ".bmp")
-    
-    for input_path in args.input:
-        input_path = os.path.abspath(input_path)
-        
-        if os.path.isdir(input_path):
-            # Handle directory
-            for filename in os.listdir(input_path):
-                if filename.lower().endswith(supported_extensions):
+
+    supported = (".png", ".jpg", ".jpeg", ".bmp")
+    total_files = total_converted = 0
+    total_original = total_converted_size = 0
+
+    for item in args.input:
+        item = os.path.abspath(item)
+
+        if os.path.isdir(item):
+            images = [f for f in os.listdir(item) if f.lower().endswith(supported)]
+            output_dir = args.output or os.path.join(item, "webp_output")
+            for idx, file in enumerate(images, 1):
+                input_path = os.path.join(item, file)
+                output_path = os.path.join(output_dir, os.path.splitext(file)[0] + ".webp")
+                orig, new, ok = convert_to_webp(input_path, output_path, args.quality)
+                if ok:
                     total_files += 1
-                    full_input_path = os.path.join(input_path, filename)
-                    orig_size, new_size, success = convert_to_webp(full_input_path, os.path.join(args.output or input_path, filename.replace(filename.split(".")[-1], "webp")), args.quality)
-                    if success:
-                        total_converted += 1
-                        total_original_size += orig_size
-                        total_new_size += new_size
-        elif os.path.isfile(input_path) and input_path.lower().endswith(supported_extensions):
-            # Handle single file
+                    total_converted += 1
+                    total_original += orig
+                    total_converted_size += new
+        elif os.path.isfile(item) and item.lower().endswith(supported):
             total_files += 1
-            orig_size, new_size, success = convert_to_webp(input_path, args.output, args.quality)
-            if success:
+            input_dir = os.path.dirname(item)
+            output_dir = args.output or os.path.join(input_dir, "webp_output")
+            output_path = os.path.join(output_dir, os.path.splitext(os.path.basename(item))[0] + ".webp")
+            orig, new, ok = convert_to_webp(item, output_path, args.quality)
+            if ok:
                 total_converted += 1
-                total_original_size += orig_size
-                total_new_size += new_size
+                total_original += orig
+                total_converted_size += new
         else:
-            print(f"Skipping {input_path}: Not a supported image file or directory")
-    
-    # Summary
+            print(f"⚠️ Skipped: {item} (unsupported format or not found)")
+
+    # Final summary
     if total_files > 0:
-        overall_reduction = ((total_original_size - total_new_size) / total_original_size) * 100
-        overall_reduction = round(overall_reduction, 2)
-        print(f"\nConversion summary: {total_converted} of {total_files} files converted successfully.")
-        print(f"Total size reduction: -{overall_reduction}%")
+        reduction = ((total_original - total_converted_size) / total_original) * 100 if total_original else 0
+        print("\n📊 Conversion Summary")
+        print(f"🖼️  Files processed: {total_files}")
+        print(f"✅ Successfully converted: {total_converted}")
+        print(f"📉 Total size reduction: -{round(reduction, 2)}%")
+    else:
+        print("🚫 No valid image files found.")
 
 if __name__ == "__main__":
     main()
